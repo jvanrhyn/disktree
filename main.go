@@ -1147,23 +1147,24 @@ func (m *model) View() string {
 	}
 }
 
-// renderOverlay composes an overlay popup centered over a full-screen renderings
-// of base content, without shifting the layout. It returns a string with exactly
-// height lines and width columns (padded as needed).
+// renderOverlay composes an overlay popup centered over a full-screen rendering
+// of base content, creating a true overlay effect where the popup appears on top
+// of the background without replacing the background content with blank space.
 func renderOverlay(base, popup string, width, height int) string {
-	// Create a fixed-size background surface
-	screen := lipgloss.Place(
+	// Create a fixed-size base surface
+	baseScreen := lipgloss.Place(
 		maxvalue(1, width), maxvalue(1, height),
 		lipgloss.Left, lipgloss.Top,
 		base,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
 	)
-
-	bgLines := strings.Split(screen, "\n")
+	
+	// Split into lines for manual overlay composition
+	bgLines := strings.Split(baseScreen, "\n")
 	popLines := strings.Split(popup, "\n")
 
-	// Determine popup dimensions
+	// Determine popup dimensions and placement
 	popW := 0
 	for _, l := range popLines {
 		if w := lipgloss.Width(l); w > popW {
@@ -1172,34 +1173,31 @@ func renderOverlay(base, popup string, width, height int) string {
 	}
 	popH := len(popLines)
 
-	// Centered 0-based placement
-	startRow := 0
-	startCol := 0
-	if height > 0 {
-		startRow = maxvalue(0, (height-popH)/2)
-	}
-	if width > 0 {
-		startCol = maxvalue(0, (width-popW)/2)
-	}
+	// Calculate centered position
+	startRow := maxvalue(0, (height-popH)/2)
+	startCol := maxvalue(0, (width-popW)/2)
 
-	// Compose output lines
+	// Create the final overlay by blending popup with background
 	finalLines := make([]string, 0, len(bgLines))
-	for i, line := range bgLines {
+	for i, bgLine := range bgLines {
 		if i >= startRow && i < startRow+popH {
 			pi := i - startRow
 			if pi >= 0 && pi < len(popLines) {
-				ol := strings.Repeat(" ", startCol) + popLines[pi]
-				// Pad to full width to avoid wrapping/artifacts
-				pad := maxvalue(0, width-lipgloss.Width(ol))
-				ol += strings.Repeat(" ", pad)
-				finalLines = append(finalLines, ol)
+				// This is where we create a true overlay effect
+				popupLine := popLines[pi]
+				
+				// The key change: instead of replacing the entire line with spaces + popup,
+				// we overlay the popup content on the background line
+				overlaidLine := overlayLineContent(bgLine, popupLine, startCol, width)
+				finalLines = append(finalLines, overlaidLine)
 				continue
 			}
 		}
-		// Keep background as-is (also padded to width)
-		pad := maxvalue(0, width-lipgloss.Width(line))
-		finalLines = append(finalLines, line+strings.Repeat(" ", pad))
+		// Keep background line as-is, properly padded
+		pad := maxvalue(0, width-lipgloss.Width(bgLine))
+		finalLines = append(finalLines, bgLine+strings.Repeat(" ", pad))
 	}
+	
 	// Ensure we return exactly height lines
 	for len(finalLines) < maxvalue(1, height) {
 		finalLines = append(finalLines, strings.Repeat(" ", maxvalue(1, width)))
@@ -1207,7 +1205,123 @@ func renderOverlay(base, popup string, width, height int) string {
 	if len(finalLines) > maxvalue(1, height) {
 		finalLines = finalLines[:maxvalue(1, height)]
 	}
+	
 	return strings.Join(finalLines, "\n")
+}
+
+// overlayLineContent overlays popup content on a background line at the specified column
+func overlayLineContent(bgLine, popupLine string, startCol, totalWidth int) string {
+	// Create a true overlay by preserving background content where popup doesn't cover
+	
+	// Ensure background line is the right width
+	bgDisplayWidth := lipgloss.Width(bgLine)
+	if bgDisplayWidth < totalWidth {
+		bgLine += strings.Repeat(" ", totalWidth-bgDisplayWidth)
+	}
+	
+	popupDisplayWidth := lipgloss.Width(popupLine)
+	
+	// For a true overlay effect, we need to extract background content carefully
+	// Since ANSI codes make this complex, we'll use a hybrid approach:
+	// - Use a dimmed version of background where popup doesn't cover
+	// - Show popup content where it does cover
+	
+	var result strings.Builder
+	
+	// Background content before popup
+	if startCol > 0 {
+		// Extract background content before popup position
+		// This is simplified - ideally we'd parse ANSI codes properly
+		bgBefore := extractDisplayChars(bgLine, 0, startCol)
+		// Dim the background content to show it's "behind" the popup
+		dimmedBefore := dimText(bgBefore)
+		result.WriteString(dimmedBefore)
+	}
+	
+	// Popup content
+	result.WriteString(popupLine)
+	
+	// Background content after popup
+	afterPopupCol := startCol + popupDisplayWidth
+	if afterPopupCol < totalWidth {
+		remainingWidth := totalWidth - afterPopupCol
+		bgAfter := extractDisplayChars(bgLine, afterPopupCol, remainingWidth)
+		dimmedAfter := dimText(bgAfter)
+		result.WriteString(dimmedAfter)
+	}
+	
+	final := result.String()
+	
+	// Ensure exact width
+	actualWidth := lipgloss.Width(final)
+	if actualWidth < totalWidth {
+		final += strings.Repeat(" ", totalWidth-actualWidth)
+	} else if actualWidth > totalWidth {
+		final = final[:totalWidth]
+	}
+	
+	return final
+}
+
+// extractDisplayChars attempts to extract visible characters from a styled string
+// This is a simplified implementation that works for basic cases
+func extractDisplayChars(text string, start, length int) string {
+	// For simplicity, we'll use the raw text and try to extract characters
+	// In a full implementation, we'd properly parse ANSI sequences
+	
+	// Remove ANSI codes for character extraction (simplified)
+	plainText := removeSimpleANSI(text)
+	
+	if start >= len(plainText) {
+		return strings.Repeat(" ", length)
+	}
+	
+	endPos := start + length
+	if endPos > len(plainText) {
+		endPos = len(plainText)
+	}
+	
+	extracted := plainText[start:endPos]
+	
+	// Pad to requested length if needed
+	if len(extracted) < length {
+		extracted += strings.Repeat(" ", length-len(extracted))
+	}
+	
+	return extracted
+}
+
+// removeSimpleANSI removes basic ANSI escape sequences (simplified)
+func removeSimpleANSI(text string) string {
+	// This is a very basic ANSI sequence remover
+	// It won't handle all cases but works for demonstration
+	result := strings.Builder{}
+	inEscape := false
+	
+	for i, char := range text {
+		if char == '\x1b' && i+1 < len(text) && text[i+1] == '[' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(char)
+	}
+	
+	return result.String()
+}
+
+// dimText creates a dimmed version of text to show it's in the background
+func dimText(text string) string {
+	// Create a dimmed effect by using faint style
+	if strings.TrimSpace(text) == "" {
+		return text // Don't style pure whitespace
+	}
+	return lipgloss.NewStyle().Faint(true).Render(text)
 }
 
 func (m *model) breadcrumb() string {
