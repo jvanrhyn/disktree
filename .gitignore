@@ -1,0 +1,62 @@
+# Deny-by-default gitignore for Go projects
+# This file intentionally ignores everything and then whitelists only
+# the files and directories necessary for the repository.
+
+# Ignore everything
+/*
+
+# But allow these files and directories (relative to repo root)
+!/.gitignore
+!/README.md
+!/LICENSE
+!/go.mod
+!/go.sum
+!/.github/
+!/src/
+!/*.go
+!/**/*.go
+!/main.go
+
+# Allow tests
+!/*_test.go
+!/**/_test.go
+
+# Allow build scripts or CI configs
+!/Makefile
+!/Dockerfile
+
+# Allow example assets and docs
+!/docs/
+!/examples/
+
+# Keep git metadata
+!.gitignore
+!.gitattributes
+
+# Ignore build outputs and editor metadata
+bin/
+artifacts/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Go module cache (local)
+/pkg/mod/
+
+# Optional: coverage and temp
+coverage.out
+*.out
+*.log
+
+# If you need to whitelist additional files or directories, add them
+# by appending lines starting with '!' after the deny-all line above.
