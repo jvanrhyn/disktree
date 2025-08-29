@@ -1188,10 +1188,41 @@ func renderOverlay(base, popup string, width, height int) string {
 		if i >= startRow && i < startRow+popH {
 			pi := i - startRow
 			if pi >= 0 && pi < len(popLines) {
-				ol := strings.Repeat(" ", startCol) + popLines[pi]
-				// Pad to full width to avoid wrapping/artifacts
-				pad := maxvalue(0, width-lipgloss.Width(ol))
-				ol += strings.Repeat(" ", pad)
+				// Overlay popup content on the background line
+				bgLine := line
+				popupLine := popLines[pi]
+				
+				// Ensure background line is at least as wide as needed
+				bgWidth := lipgloss.Width(bgLine)
+				if bgWidth < width {
+					bgLine += strings.Repeat(" ", width-bgWidth)
+				}
+				
+				// Convert to runes for proper character handling
+				bgRunes := []rune(bgLine)
+				popupRunes := []rune(popupLine)
+				
+				// Create result line by overlaying popup on background
+				resultRunes := make([]rune, len(bgRunes))
+				copy(resultRunes, bgRunes)
+				
+				// Overlay popup content at the calculated position
+				endCol := minvalue(len(resultRunes), startCol+len(popupRunes))
+				for j, pr := range popupRunes {
+					if startCol+j < endCol {
+						resultRunes[startCol+j] = pr
+					}
+				}
+				
+				ol := string(resultRunes)
+				// Ensure line is exactly the right width
+				actualWidth := lipgloss.Width(ol)
+				if actualWidth < width {
+					ol += strings.Repeat(" ", width-actualWidth)
+				} else if actualWidth > width {
+					// Truncate if somehow too long
+					ol = ol[:width]
+				}
 				finalLines = append(finalLines, ol)
 				continue
 			}
