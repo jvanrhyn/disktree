@@ -1220,8 +1220,13 @@ func renderOverlay(base, popup string, width, height int) string {
 				if actualWidth < width {
 					ol += strings.Repeat(" ", width-actualWidth)
 				} else if actualWidth > width {
-					// Truncate if somehow too long
-					ol = ol[:width]
+					// Truncate respecting visual width and Unicode boundaries
+					ol = truncateToWidth(ol, width)
+					// Add padding if needed after truncation
+					actualWidth = lipgloss.Width(ol)
+					if actualWidth < width {
+						ol += strings.Repeat(" ", width-actualWidth)
+					}
 				}
 				finalLines = append(finalLines, ol)
 				continue
@@ -1320,6 +1325,31 @@ func maxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// truncateToWidth truncates a string to fit within the specified visual width,
+// respecting Unicode character boundaries
+func truncateToWidth(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	
+	runes := []rune(s)
+	var result strings.Builder
+	
+	for _, r := range runes {
+		// Check the visual width this rune would add
+		testString := result.String() + string(r)
+		testWidth := lipgloss.Width(testString)
+		
+		if testWidth > maxWidth {
+			break
+		}
+		
+		result.WriteRune(r)
+	}
+	
+	return result.String()
 }
 
 // --------------------------- Trash helpers -----------------------
