@@ -1002,7 +1002,10 @@ func (m *model) reflowColumns() {
 	// Increase Dirs minInts width so larger directory counts aren't truncated,
 	// and slightly reduce the Name minimum to make room on narrower terminals.
 	minInts := []int{8, 10, 6, 8, 12, 10} // Name unused index 0, Size=10, Files=6, Dirs=8, %parent=12, Graph=10
-	avail := m.width - 4                  // some padding
+	
+	// Reserve more space for table formatting (borders, separators, padding)
+	// Bubble Tea table adds separators between columns and may have borders
+	avail := m.width - 10  // more conservative padding for table formatting
 
 	// Base widths
 	nameW := maxvalue(20, avail-(minInts[1]+minInts[2]+minInts[3]+minInts[4]+minInts[5]))
