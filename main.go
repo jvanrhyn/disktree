@@ -1002,7 +1002,10 @@ func (m *model) reflowColumns() {
 	// Increase Dirs minInts width so larger directory counts aren't truncated,
 	// and slightly reduce the Name minimum to make room on narrower terminals.
 	minInts := []int{8, 10, 6, 8, 12, 10} // Name unused index 0, Size=10, Files=6, Dirs=8, %parent=12, Graph=10
-	avail := m.width - 4                  // some padding
+	
+	// Reserve more space for table formatting (borders, separators, padding)
+	// Bubble Tea table adds separators between columns and may have borders
+	avail := m.width - 10  // more conservative padding for table formatting
 
 	// Base widths
 	nameW := maxvalue(20, avail-(minInts[1]+minInts[2]+minInts[3]+minInts[4]+minInts[5]))
@@ -1220,16 +1223,30 @@ func renderOverlay(base, popup string, width, height int) string {
 				if actualWidth < width {
 					ol += strings.Repeat(" ", width-actualWidth)
 				} else if actualWidth > width {
-					// Truncate if somehow too long
-					ol = ol[:width]
+					// Truncate respecting visual width and Unicode boundaries
+					ol = truncateToWidth(ol, width)
+					// Add padding if needed after truncation
+					actualWidth = lipgloss.Width(ol)
+					if actualWidth < width {
+						ol += strings.Repeat(" ", width-actualWidth)
+					}
 				}
 				finalLines = append(finalLines, ol)
 				continue
 			}
 		}
-		// Keep background as-is (also padded to width)
-		pad := maxvalue(0, width-lipgloss.Width(line))
-		finalLines = append(finalLines, line+strings.Repeat(" ", pad))
+		// Keep background but ensure it's properly truncated and padded to width
+		bgLine := line
+		actualWidth := lipgloss.Width(bgLine)
+		if actualWidth > width {
+			// Truncate respecting visual width and Unicode boundaries
+			bgLine = truncateToWidth(bgLine, width)
+			actualWidth = lipgloss.Width(bgLine)
+		}
+		if actualWidth < width {
+			bgLine += strings.Repeat(" ", width-actualWidth)
+		}
+		finalLines = append(finalLines, bgLine)
 	}
 	// Ensure we return exactly height lines
 	for len(finalLines) < maxvalue(1, height) {
@@ -1320,6 +1337,31 @@ func maxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// truncateToWidth truncates a string to fit within the specified visual width,
+// respecting Unicode character boundaries
+func truncateToWidth(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	
+	runes := []rune(s)
+	var result strings.Builder
+	
+	for _, r := range runes {
+		// Check the visual width this rune would add
+		testString := result.String() + string(r)
+		testWidth := lipgloss.Width(testString)
+		
+		if testWidth > maxWidth {
+			break
+		}
+		
+		result.WriteRune(r)
+	}
+	
+	return result.String()
 }
 
 // --------------------------- Trash helpers -----------------------
