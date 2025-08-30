@@ -1193,6 +1193,7 @@ func renderOverlay(base, popup string, width, height int) string {
 				// Overlay popup content on the background line
 				bgLine := line
 				popupLine := popLines[pi]
+				popupWidth := lipgloss.Width(popupLine)
 				
 				// Ensure background line is at least as wide as needed
 				bgWidth := lipgloss.Width(bgLine)
@@ -1200,23 +1201,24 @@ func renderOverlay(base, popup string, width, height int) string {
 					bgLine += strings.Repeat(" ", width-bgWidth)
 				}
 				
-				// Convert to runes for proper character handling
-				bgRunes := []rune(bgLine)
-				popupRunes := []rune(popupLine)
+				// Split background line into three parts based on visual width:
+				// 1. Content before popup (0 to startCol)
+				// 2. Popup content (startCol to startCol+popupWidth)  
+				// 3. Content after popup (startCol+popupWidth to end)
 				
-				// Create result line by overlaying popup on background
-				resultRunes := make([]rune, len(bgRunes))
-				copy(resultRunes, bgRunes)
+				var beforePopup, afterPopup string
 				
-				// Overlay popup content at the calculated position
-				endCol := minvalue(len(resultRunes), startCol+len(popupRunes))
-				for j, pr := range popupRunes {
-					if startCol+j < endCol {
-						resultRunes[startCol+j] = pr
-					}
+				// Extract content before popup position
+				if startCol > 0 {
+					beforePopup = truncateToWidth(bgLine, startCol)
 				}
 				
-				ol := string(resultRunes)
+				// Extract content after popup position
+				popupEndCol := startCol + popupWidth
+				afterPopup = extractAfterPosition(bgLine, popupEndCol)
+				
+				// Reconstruct the line: before + popup + after
+				ol := beforePopup + popupLine + afterPopup
 				// Ensure line is exactly the right width and character count
 				actualWidth := lipgloss.Width(ol)
 				if actualWidth < width {
@@ -1371,6 +1373,35 @@ func truncateToWidth(s string, maxWidth int) string {
 	}
 	
 	return result.String()
+}
+
+// runeWidth returns the visual width of a single rune
+func runeWidth(r rune) int {
+	return lipgloss.Width(string(r))
+}
+
+// extractAfterPosition extracts the part of string that starts at the given visual position
+func extractAfterPosition(s string, startPos int) string {
+	if startPos <= 0 {
+		return s
+	}
+	
+	totalWidth := lipgloss.Width(s)
+	if startPos >= totalWidth {
+		return ""
+	}
+	
+	runes := []rune(s)
+	currentWidth := 0
+	
+	for i, r := range runes {
+		if currentWidth >= startPos {
+			return string(runes[i:])
+		}
+		currentWidth += runeWidth(r)
+	}
+	
+	return ""
 }
 
 // --------------------------- Trash helpers -----------------------

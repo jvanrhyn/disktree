@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestRenderOverlay(t *testing.T) {
@@ -132,5 +133,100 @@ func TestRenderOverlayEdgeCases(t *testing.T) {
 	}
 	if lines[2] != expectedLine3 {
 		t.Fatalf("Line 2 incorrect. Expected: %q, Got: %q", expectedLine3, lines[2])
+	}
+}
+
+func TestDebugOverlayLogic(t *testing.T) {
+	// Debug the overlay logic step by step
+	base := "📁 Music                                                     32.2 MB     143     14          0.1%        ░░░"
+	popup := "┌──────────────────────────────────┐\n│        Scanning files...         │\n└──────────────────────────────────┘"
+	
+	width := 120
+	
+	t.Logf("Base line: %q", base)
+	t.Logf("Base line width: %d", lipgloss.Width(base))
+	
+	popLines := strings.Split(popup, "\n")
+	t.Logf("Popup lines: %v", popLines)
+	
+	for i, popLine := range popLines {
+		t.Logf("Popup line %d: %q (width: %d)", i, popLine, lipgloss.Width(popLine))
+	}
+	
+	// Test the middle popup line (index 1)
+	popupLine := popLines[1] // "│        Scanning files...         │"
+	popupWidth := lipgloss.Width(popupLine)
+	
+	// Calculate popup position (centered)
+	startCol := (width - popupWidth) / 2
+	
+	t.Logf("Popup width: %d, start column: %d", popupWidth, startCol)
+	
+	// Test the helper functions
+	beforePopup := truncateToWidth(base, startCol)
+	t.Logf("Before popup (truncate to %d): %q", startCol, beforePopup)
+	
+	popupEndCol := startCol + popupWidth
+	afterPopup := extractAfterPosition(base, popupEndCol)
+	t.Logf("After popup (extract from %d): %q", popupEndCol, afterPopup)
+	
+	result := beforePopup + popupLine + afterPopup
+	t.Logf("Combined result: %q", result)
+	t.Logf("Combined result width: %d", lipgloss.Width(result))
+}
+
+func TestOverlayPreservesContentAfterPopup(t *testing.T) {
+	// Test the actual use case: a full table view with popup overlay
+	header := "DiskTree TUI — /home/user"
+	tableRows := []string{
+		"📁 Music                                                     32.2 MB     143     14          0.1%        ░░░",
+		"📁 .anydesk                                                  32.2 MB     20      9           0.1%        ░░░",
+		"📁 .BurpSuite                                                31.0 MB     1845    149         0.1%        ░░░",
+		"📁 temp                                                      16.4 MB     2375    187         0.0%        ░░░",
+		"📁 .dbclient                                                 15.9 MB     2       2           0.0%        ░░░",
+	}
+	status := "Status line"
+	footer := "↑/↓ move  Enter open  q=quit"
+	
+	// Construct the full body as the actual app would
+	allLines := append([]string{header}, tableRows...)
+	allLines = append(allLines, status, footer)
+	body := strings.Join(allLines, "\n")
+	
+	popup := "┌──────────────────────────────────┐\n│        Scanning files...         │\n└──────────────────────────────────┘"
+	
+	width := 120
+	height := len(allLines)
+	
+	result := renderOverlay(body, popup, width, height)
+	lines := strings.Split(result, "\n")
+	
+	// Debug all lines
+	for i, line := range lines {
+		t.Logf("Line %d: %q", i, line)
+	}
+	
+	// Find lines that should have popup overlay (they should be in the middle of the screen)
+	// The popup has 3 lines and should be centered vertically
+	popupStartRow := (height - 3) / 2
+	
+	// Check the middle popup line
+	if popupStartRow+1 < len(lines) {
+		overlayLine := lines[popupStartRow+1]
+		
+		// Should contain original table content before popup
+		if !strings.Contains(overlayLine, "📁") {
+			t.Errorf("Overlay line missing file icon. Line: %q", overlayLine)
+		}
+		
+		// Should contain the popup box content
+		if !strings.Contains(overlayLine, "Scanning files") {
+			t.Errorf("Overlay line missing popup content. Line: %q", overlayLine)  
+		}
+		
+		// Should contain content after popup (file size, counts, etc.)
+		if !strings.Contains(overlayLine, "149") || !strings.Contains(overlayLine, "░") {
+			t.Errorf("Overlay line missing content after popup. Line: %q", overlayLine)
+		}
 	}
 }
