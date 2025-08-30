@@ -1232,9 +1232,18 @@ func renderOverlay(base, popup string, width, height int) string {
 				continue
 			}
 		}
-		// Keep background as-is (also padded to width)
-		pad := maxvalue(0, width-lipgloss.Width(line))
-		finalLines = append(finalLines, line+strings.Repeat(" ", pad))
+		// Keep background but ensure it's properly truncated and padded to width
+		bgLine := line
+		actualWidth := lipgloss.Width(bgLine)
+		if actualWidth > width {
+			// Truncate respecting visual width and Unicode boundaries
+			bgLine = truncateToWidth(bgLine, width)
+			actualWidth = lipgloss.Width(bgLine)
+		}
+		if actualWidth < width {
+			bgLine += strings.Repeat(" ", width-actualWidth)
+		}
+		finalLines = append(finalLines, bgLine)
 	}
 	// Ensure we return exactly height lines
 	for len(finalLines) < maxvalue(1, height) {
