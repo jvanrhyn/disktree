@@ -1002,7 +1002,9 @@ func (m *model) reflowColumns() {
 	// Increase Dirs minInts width so larger directory counts aren't truncated,
 	// and slightly reduce the Name minimum to make room on narrower terminals.
 	minInts := []int{8, 10, 6, 8, 12, 10} // Name unused index 0, Size=10, Files=6, Dirs=8, %parent=12, Graph=10
-	avail := m.width - 4                  // some padding
+	// Reserve more space for table formatting (borders, separators, padding)
+	// Bubble Tea table adds separators between columns and may have borders
+	avail := m.width - 10  // more conservative padding for table formatting
 
 	// Base widths
 	nameW := maxvalue(20, avail-(minInts[1]+minInts[2]+minInts[3]+minInts[4]+minInts[5]))
@@ -1191,6 +1193,7 @@ func renderOverlay(base, popup string, width, height int) string {
 				// Overlay popup content on the background line
 				bgLine := line
 				popupLine := popLines[pi]
+				popupWidth := lipgloss.Width(popupLine)
 				
 				// Ensure background line is at least as wide as needed
 				bgWidth := lipgloss.Width(bgLine)
@@ -1198,38 +1201,63 @@ func renderOverlay(base, popup string, width, height int) string {
 					bgLine += strings.Repeat(" ", width-bgWidth)
 				}
 				
-				// Convert to runes for proper character handling
-				bgRunes := []rune(bgLine)
-				popupRunes := []rune(popupLine)
+				// Split background line into three parts based on visual width:
+				// 1. Content before popup (0 to startCol)
+				// 2. Popup content (startCol to startCol+popupWidth)  
+				// 3. Content after popup (startCol+popupWidth to end)
 				
-				// Create result line by overlaying popup on background
-				resultRunes := make([]rune, len(bgRunes))
-				copy(resultRunes, bgRunes)
+				var beforePopup, afterPopup string
 				
-				// Overlay popup content at the calculated position
-				endCol := minvalue(len(resultRunes), startCol+len(popupRunes))
-				for j, pr := range popupRunes {
-					if startCol+j < endCol {
-						resultRunes[startCol+j] = pr
-					}
+				// Extract content before popup position
+				if startCol > 0 {
+					beforePopup = truncateToWidth(bgLine, startCol)
 				}
 				
-				ol := string(resultRunes)
-				// Ensure line is exactly the right width
+				// Extract content after popup position
+				popupEndCol := startCol + popupWidth
+				afterPopup = extractAfterPosition(bgLine, popupEndCol)
+				
+				// Reconstruct the line: before + popup + after
+				ol := beforePopup + popupLine + afterPopup
+				// Ensure line is exactly the right width and character count
 				actualWidth := lipgloss.Width(ol)
 				if actualWidth < width {
 					ol += strings.Repeat(" ", width-actualWidth)
 				} else if actualWidth > width {
-					// Truncate if somehow too long
-					ol = ol[:width]
+					// Truncate respecting visual width and Unicode boundaries
+					ol = truncateToWidth(ol, width)
+					// Add padding if needed after truncation
+					actualWidth = lipgloss.Width(ol)
+					if actualWidth < width {
+						ol += strings.Repeat(" ", width-actualWidth)
+					}
 				}
+				
+				// Final cleanup: ensure the string length is reasonable
+				// Rebuild the string if it has excessive character count
+				if len(ol) > width*2 {
+					ol = truncateToWidth(ol, width)
+					if lipgloss.Width(ol) < width {
+						ol += strings.Repeat(" ", width-lipgloss.Width(ol))
+					}
+				}
+				
 				finalLines = append(finalLines, ol)
 				continue
 			}
 		}
-		// Keep background as-is (also padded to width)
-		pad := maxvalue(0, width-lipgloss.Width(line))
-		finalLines = append(finalLines, line+strings.Repeat(" ", pad))
+		// Keep background but ensure it's properly truncated and padded to width
+		bgLine := line
+		actualWidth := lipgloss.Width(bgLine)
+		if actualWidth > width {
+			// Truncate respecting visual width and Unicode boundaries
+			bgLine = truncateToWidth(bgLine, width)
+			actualWidth = lipgloss.Width(bgLine)
+		}
+		if actualWidth < width {
+			bgLine += strings.Repeat(" ", width-actualWidth)
+		}
+		finalLines = append(finalLines, bgLine)
 	}
 	// Ensure we return exactly height lines
 	for len(finalLines) < maxvalue(1, height) {
@@ -1320,6 +1348,60 @@ func maxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// truncateToWidth truncates a string to fit within the specified visual width,
+// respecting Unicode character boundaries
+func truncateToWidth(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	
+	runes := []rune(s)
+	var result strings.Builder
+	
+	for _, r := range runes {
+		// Check the visual width this rune would add
+		testString := result.String() + string(r)
+		testWidth := lipgloss.Width(testString)
+		
+		if testWidth > maxWidth {
+			break
+		}
+		
+		result.WriteRune(r)
+	}
+	
+	return result.String()
+}
+
+// runeWidth returns the visual width of a single rune
+func runeWidth(r rune) int {
+	return lipgloss.Width(string(r))
+}
+
+// extractAfterPosition extracts the part of string that starts at the given visual position
+func extractAfterPosition(s string, startPos int) string {
+	if startPos <= 0 {
+		return s
+	}
+	
+	totalWidth := lipgloss.Width(s)
+	if startPos >= totalWidth {
+		return ""
+	}
+	
+	runes := []rune(s)
+	currentWidth := 0
+	
+	for i, r := range runes {
+		if currentWidth >= startPos {
+			return string(runes[i:])
+		}
+		currentWidth += runeWidth(r)
+	}
+	
+	return ""
 }
 
 // --------------------------- Trash helpers -----------------------
