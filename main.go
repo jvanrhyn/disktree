@@ -1002,7 +1002,6 @@ func (m *model) reflowColumns() {
 	// Increase Dirs minInts width so larger directory counts aren't truncated,
 	// and slightly reduce the Name minimum to make room on narrower terminals.
 	minInts := []int{8, 10, 6, 8, 12, 10} // Name unused index 0, Size=10, Files=6, Dirs=8, %parent=12, Graph=10
-	
 	// Reserve more space for table formatting (borders, separators, padding)
 	// Bubble Tea table adds separators between columns and may have borders
 	avail := m.width - 10  // more conservative padding for table formatting
@@ -1218,7 +1217,7 @@ func renderOverlay(base, popup string, width, height int) string {
 				}
 				
 				ol := string(resultRunes)
-				// Ensure line is exactly the right width
+				// Ensure line is exactly the right width and character count
 				actualWidth := lipgloss.Width(ol)
 				if actualWidth < width {
 					ol += strings.Repeat(" ", width-actualWidth)
@@ -1231,6 +1230,16 @@ func renderOverlay(base, popup string, width, height int) string {
 						ol += strings.Repeat(" ", width-actualWidth)
 					}
 				}
+				
+				// Final cleanup: ensure the string length is reasonable
+				// Rebuild the string if it has excessive character count
+				if len(ol) > width*2 {
+					ol = truncateToWidth(ol, width)
+					if lipgloss.Width(ol) < width {
+						ol += strings.Repeat(" ", width-lipgloss.Width(ol))
+					}
+				}
+				
 				finalLines = append(finalLines, ol)
 				continue
 			}
