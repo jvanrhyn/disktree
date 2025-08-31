@@ -1028,12 +1028,26 @@ func (m *model) View() string {
 		status = m.spin.View() + " " + status
 	}
 	foot := lipgloss.NewStyle().Faint(true).Render("↑/↓ move  Enter open  Backspace up  s=size  n=name  r=rescan  e=export CSV  d=delete  u=undo  q=quit")
-	body := lipgloss.JoinVertical(lipgloss.Left,
-		head,
-		m.tbl.View(),
-		status,
-		foot,
-	)
+	
+	// Helper function to build body content
+	buildBody := func(useNoSelectionTable bool) string {
+		var tableView string
+		if useNoSelectionTable {
+			// Temporarily disable selection highlighting for background rendering
+			m.tbl.SetStyles(tableStylesNoSelection())
+			tableView = m.tbl.View()
+			m.tbl.SetStyles(tableStyles()) // Restore original styles
+		} else {
+			tableView = m.tbl.View()
+		}
+		
+		return lipgloss.JoinVertical(lipgloss.Left,
+			head,
+			tableView,
+			status,
+			foot,
+		)
+	}
 
 	if m.confirmDelete {
 		// Build the modal popup — width clamped to terminal to avoid wrap/clipping
@@ -1055,6 +1069,9 @@ func (m *model) View() string {
 		content := lipgloss.JoinHorizontal(lipgloss.Center, m.status)
 		footer := lipgloss.JoinHorizontal(lipgloss.Center, yes, " ", no)
 		popup := modalStyle.Render(lipgloss.JoinVertical(lipgloss.Center, content, "", footer))
+
+		// Use body without selection highlighting for background
+		body := buildBody(true)
 
 		// If we don't yet know terminal size, fall back to simple body+popup
 		if m.width == 0 || m.height == 0 {
@@ -1094,6 +1111,10 @@ func (m *model) View() string {
 		modalStyle := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1, 2).Width(popupW).Align(lipgloss.Center).Background(lipgloss.Color("0"))
 		content := lipgloss.JoinHorizontal(lipgloss.Center, m.spin.View(), " ", m.status)
 		popup := modalStyle.Render(content)
+		
+		// Use body without selection highlighting for background
+		body := buildBody(true)
+		
 		if m.width == 0 || m.height == 0 {
 			// Use conservative defaults to render a true overlay even before WindowSize
 			ow, oh := m.width, m.height
@@ -1144,6 +1165,9 @@ func (m *model) View() string {
 				oh = 24
 			}
 		}
+		
+		// Use normal table with selection highlighting for regular view
+		body := buildBody(false)
 		base := lipgloss.Place(maxvalue(1, ow), maxvalue(1, oh), lipgloss.Left, lipgloss.Top, body, lipgloss.WithWhitespaceChars(" "), lipgloss.WithWhitespaceForeground(lipgloss.Color("0")))
 		return base
 	}
@@ -1648,6 +1672,20 @@ func tableStyles() table.Styles {
 		Foreground(lipgloss.NoColor{}).
 		Background(lipgloss.Color("57")).
 		Bold(false)
+	return styles
+}
+
+// tableStylesNoSelection returns table styles without selection highlighting
+// for use when rendering background content under popups
+func tableStylesNoSelection() table.Styles {
+	styles := table.DefaultStyles()
+	styles.Header = styles.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	// No selection highlighting - use default cell style for selected rows
+	styles.Selected = styles.Cell
 	return styles
 }
 
